@@ -13,7 +13,7 @@ Required API keys:
 1. Point a render CRON job to this repository
 2. Set the environment variables in the render dashboard as per the image below:
 
-![Render Environment Variables](./images/Screenshot%202024-12-17%20122640.png)
+![Render Environment Variables](./images/Screenshot%202024-12-17%20220208.png)
 
 3. Set the entry point to `python email_script.py`
 
