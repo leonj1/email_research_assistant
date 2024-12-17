@@ -138,7 +138,7 @@ def check_search_relevance(search_results: Dict[str, Any]) -> RelevanceCheckOutp
     """
     prompt = load_prompt("relevance_check")
     prompt_template = ChatPromptTemplate.from_messages([("system", prompt)])
-    llm = ChatOpenAI(model="gpt-4").with_structured_output(RelevanceCheckOutput)
+    llm = ChatOpenAI(model="gpt-4o").with_structured_output(RelevanceCheckOutput)
     
     return (prompt_template | llm).invoke({'input_search_results': search_results})
 
@@ -231,7 +231,7 @@ def scrape_and_save_markdown(relevant_results: List[Dict[str, Any]]) -> List[Dic
 
 def generate_summaries(markdown_contents: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     """
-    Generate summaries for markdown content using GPT-4.
+    Generate summaries for markdown content using GPT-4o.
     
     Args:
         markdown_contents: List of dictionaries containing markdown content
@@ -242,7 +242,7 @@ def generate_summaries(markdown_contents: List[Dict[str, Any]]) -> List[Dict[str
     pathlib.Path("markdown_summaries").mkdir(exist_ok=True)
     summary_prompt = load_prompt("summarise_markdown_page")
     summary_template = ChatPromptTemplate.from_messages([("system", summary_prompt)])
-    llm = ChatOpenAI(model="gpt-4")
+    llm = ChatOpenAI(model="gpt-4o")
     summary_chain = summary_template | llm
     
     summaries = []
@@ -354,7 +354,7 @@ def main():
     summaries = generate_summaries(markdown_contents)
 
     # Set up LLM workflow
-    llm = ChatOpenAI(model="gpt-4")
+    llm = ChatOpenAI(model="gpt-4o")
     
     with open("email_template.md", "r") as f:
         email_template = f.read()
