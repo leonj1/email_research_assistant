@@ -336,7 +336,16 @@ def send_email(email_content: str):
 
 def main():
     """Main execution flow."""
-    validate_environment_variables()
+    try:
+        validate_environment_variables()
+    except ValueError as e:
+        with open(".env", "w") as f:
+            # Load environment variables from .env file
+            for line in f:
+                if '=' in line:
+                    key, value = line.strip().split('=', 1)
+                    os.environ[key] = value
+        print("Loaded environment variables from .env file")
     
     # Search and filter results
     relevant_results = []
