@@ -21,7 +21,7 @@ Thats it!
 
 ## Setup for local development
 
-1. Install the required packages
+1. Install the required packages `pip install -r requirements.txt`
 2. Set the environment variables in the .env file
 3. Run the script with `python email_script.py`
 
