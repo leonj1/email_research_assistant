@@ -8,7 +8,7 @@ You will be given a markdown file of an online article. Your task is to read the
 
 # Output
 
-Markdown formatted text containing a summary of the article.
+Markdown formatted text containing a detailed summary of the article, including relevant people, companies, and technologies mentioned.
 
 # Input
 

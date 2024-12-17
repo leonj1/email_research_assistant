@@ -16,6 +16,8 @@ You need to provide an output summary in html format, following this markdown te
 {input_template}
 ```
 
+The deep dive section should be significantly more detailed than the high level summary section.
+
 # Input Summaries
 
 {list_of_summaries}

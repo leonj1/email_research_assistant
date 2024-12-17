@@ -11,7 +11,7 @@ You are reviewing a daily email summary for the CTO that has been created by a r
 - Light hearted
 - Links included with each reference
 - Emojis included where appropriate
-- The email should be easy to read and consume
+- The email should have a high level summary at the top, but also further detail if the CTO should read the full article
 
 Be harsh, and provide feedback on the email, you have high standards.
 
