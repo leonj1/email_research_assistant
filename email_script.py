@@ -312,7 +312,6 @@ def send_email(email_content: str):
     email_params = {
         "subject": "Daily AI Research Summary",
         "sender": {"name": "Will White", "email": "whitew1994@gmail.com"},
-        "replyTo": {"name": "Will White", "email": "whitew1994@gmail.com"},
         "html_content": email_content,
         "to": [{"email": "whitew1994@gmail.com", "name": "Will White"}],
         "params": {"subject": "Daily AI Research Summary"}
