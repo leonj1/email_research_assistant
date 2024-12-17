@@ -37,7 +37,7 @@ SEARCH_TERMS = [
 required_environment_variables = [
     "SERPER_API_KEY",
     "SCRAPING_API_KEY",
-    "SENDINBLUE_API_KEY",
+    "SENDINGBLUE_API_KEY",
     "OPENAI_API_KEY"
 ]
 
@@ -313,7 +313,7 @@ def conditional_edge(state: State) -> Literal["summariser", END]:
 def send_email(email_content: str):
     """Send email using Sendinblue API."""
     configuration = sib_api_v3_sdk.Configuration()
-    configuration.api_key['api-key'] = os.getenv("SENDINBLUE_API_KEY")
+    configuration.api_key['api-key'] = os.getenv("SENDINGBLUE_API_KEY")
     
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
     
