@@ -12,7 +12,7 @@ You are searching through google, and trying to determine which links are potent
 
 You will be asked to review search results and to determine if they are relevant to explore further, or if they are not relevant.
 
-You will be given a list of 20 search results, and you will need to determine which 5 are most relevant, and detail why.
+You will be given a list of search results, and you will need to determine which 3 are most relevant, and detail why.
 
 # Example of what is relevant 
 
@@ -34,7 +34,7 @@ You will be given a list of 20 search results, and you will need to determine wh
 
 # Output
 
-You will need to output the ID of the 5 most relevant search results, and a short explanation for why they are relevant.
+You will need to output the ID of the 3 most relevant search results, and a short explanation for why they are relevant.
 
 # Input
 
