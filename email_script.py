@@ -105,6 +105,8 @@ def search_serper(search_query: str) -> List[Dict[str, Any]]:
 
     response = requests.post(url, headers=headers, data=payload)
     results = response.json()
+    if 'organic' not in results:
+        raise ValueError(f"No organic results found in results {results} for search query {search_query}")
     results_list = results['organic']
 
     return [
