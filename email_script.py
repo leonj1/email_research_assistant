@@ -37,7 +37,7 @@ SEARCH_TERMS = [
 SERPER_API_KEY = "2cfb0efb4ce760a4061a4234229967b41207dff5"
 SCRAPING_API_KEY = "c0bFSYJ2aaJQGjz3E03iL8fFCXC6kIM6Da0QAq5I3z4vR4TzWVnDqBGAW60y33FqGRENnAo67ZS0jFlM9D"
 SENDINBLUE_API_KEY = "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"
-
+OPENAI_API_KEY = "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"
 
 class ResultRelevance(BaseModel):
     """Model for storing relevance check results."""
@@ -110,14 +110,6 @@ def search_serper(search_query: str) -> List[Dict[str, Any]]:
         for idx, result in enumerate(results_list, 1)
     ]
 
-
-def load_environment():
-    """Load environment variables from .env file."""
-    with open('.env', 'r') as f:
-        for line in f:
-            if line.strip():
-                key, value = line.strip().split('=', 1)
-                os.environ[key] = value
 
 
 def load_prompt(prompt_name: str) -> str:
@@ -337,8 +329,10 @@ def send_email(email_content: str):
 
 def main():
     """Main execution flow."""
-    # Initialize
-    load_environment()
+    os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+    os.environ["SERPER_API_KEY"] = SERPER_API_KEY
+    os.environ["SCRAPING_API_KEY"] = SCRAPING_API_KEY
+    os.environ["SENDINBLUE_API_KEY"] = SENDINBLUE_API_KEY
     
     # Search and filter results
     relevant_results = []
