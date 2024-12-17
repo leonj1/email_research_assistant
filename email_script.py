@@ -34,10 +34,18 @@ SEARCH_TERMS = [
     "Anthropic LinkedIn"
 ]
 
-SERPER_API_KEY = "2cfb0efb4ce760a4061a4234229967b41207dff5"
-SCRAPING_API_KEY = "c0bFSYJ2aaJQGjz3E03iL8fFCXC6kIM6Da0QAq5I3z4vR4TzWVnDqBGAW60y33FqGRENnAo67ZS0jFlM9D"
-SENDINBLUE_API_KEY = "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"
-OPENAI_API_KEY = "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"
+required_environment_variables = [
+    "SERPER_API_KEY",
+    "SCRAPING_API_KEY",
+    "SENDINBLUE_API_KEY",
+    "OPENAI_API_KEY"
+]
+
+def validate_environment_variables():
+    """Validate environment variables."""
+    for var in required_environment_variables:
+        if os.getenv(var) is None:
+            raise ValueError(f"Environment variable {var} is not set")
 
 class ResultRelevance(BaseModel):
     """Model for storing relevance check results."""
@@ -91,7 +99,7 @@ def search_serper(search_query: str) -> List[Dict[str, Any]]:
     })
 
     headers = {
-        'X-API-KEY': SERPER_API_KEY,
+        'X-API-KEY': os.getenv("SERPER_API_KEY"),
         'Content-Type': 'application/json'
     }
 
@@ -191,7 +199,7 @@ def scrape_and_save_markdown(relevant_results: List[Dict[str, Any]]) -> List[Dic
             continue
 
         payload = {
-            "api_key": SCRAPING_API_KEY,
+            "api_key": os.getenv("SCRAPING_API_KEY"),
             "url": result['link'],
             "render_js": "true"
         }
@@ -305,15 +313,15 @@ def conditional_edge(state: State) -> Literal["summariser", END]:
 def send_email(email_content: str):
     """Send email using Sendinblue API."""
     configuration = sib_api_v3_sdk.Configuration()
-    configuration.api_key['api-key'] = SENDINBLUE_API_KEY
+    configuration.api_key['api-key'] = os.getenv("SENDINBLUE_API_KEY")
     
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
     
     email_params = {
         "subject": "Daily AI Research Summary",
-        "sender": {"name": "Will White", "email": "whitew1994@gmail.com"},
+        "sender": {"name": "Will White", "email": os.getenv("DESTINATION_EMAIL")},
         "html_content": email_content,
-        "to": [{"email": "whitew1994@gmail.com", "name": "Will White"}],
+        "to": [{"email": os.getenv("DESTINATION_EMAIL"), "name": "Will White"}],
         "params": {"subject": "Daily AI Research Summary"}
     }
     
@@ -328,10 +336,7 @@ def send_email(email_content: str):
 
 def main():
     """Main execution flow."""
-    os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-    os.environ["SERPER_API_KEY"] = SERPER_API_KEY
-    os.environ["SCRAPING_API_KEY"] = SCRAPING_API_KEY
-    os.environ["SENDINBLUE_API_KEY"] = SENDINBLUE_API_KEY
+    validate_environment_variables()
     
     # Search and filter results
     relevant_results = []
