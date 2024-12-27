@@ -1,3 +1,5 @@
 .conda/
 *.md
 *.json
+.venv
+
