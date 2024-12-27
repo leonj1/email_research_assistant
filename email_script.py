@@ -24,6 +24,8 @@ from typing_extensions import TypedDict
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 import logging
+from ollama import chat
+from pydantic import BaseModel
 
 # Configure logging
 logging.basicConfig(
@@ -49,6 +51,11 @@ required_environment_variables = [
     "OPENAI_API_KEY",
     "DESTINATION_EMAIL"
 ]
+
+# create enum that could either be OLLAMA or OPENAI
+class ModelType(str):
+    OLLAMA = "ollama"
+    OPENAI = "openai"
 
 def validate_environment_variables():
     """Validate environment variables."""
@@ -96,7 +103,7 @@ def search_serper(search_query: str) -> List[Dict[str, Any]]:
     """Search Google using the Serper API."""
     logger.info(f"Searching Serper API for query: {search_query}")
     url = "https://google.serper.dev/search"
-    
+
     payload = {
         "q": search_query,
         "gl": "gb",
@@ -110,22 +117,22 @@ def search_serper(search_query: str) -> List[Dict[str, Any]]:
         'Content-Type': 'application/json'
     }
     logger.debug("Making request to Serper API")
-    
+
     response = requests.post(url, headers=headers, json=payload)
     results = response.json()
-    
+
     if response.status_code != 200:
         logger.error(f"Serper API error: {results}")
         raise ValueError(f"Serper API error: {results}")
-    
+
     organic_results = results.get('organic', [])
     logger.info(f"Found {len(organic_results)} results")
     logger.debug(f"Raw results: {results}")
-    
+
     if not organic_results:
         logger.error(f"No organic results found in results {results}")
         raise ValueError(f"No organic results found in results {results}")
-    
+
     # Add IDs to results
     processed_results = []
     for idx, result in enumerate(organic_results):
@@ -136,7 +143,7 @@ def search_serper(search_query: str) -> List[Dict[str, Any]]:
             'snippet': result.get('snippet', ''),
             'search_term': search_query
         })
-    
+
     return processed_results
 
 
@@ -150,16 +157,16 @@ def check_search_relevance(search_results: Dict[str, Any]) -> RelevanceCheckOutp
     """Analyze search results and determine the most relevant ones."""
     logger.info("Checking relevance of search results")
     logger.debug(f"Processing {len(search_results)} results")
-    
+
     prompt = load_prompt("relevance_check")
     logger.debug(f"Loaded prompt template: {prompt}")
-    
+
     prompt_template = ChatPromptTemplate.from_messages([("system", prompt)])
     model = ChatOpenAI().with_structured_output(RelevanceCheckOutput)
-    
+
     chain = prompt_template | model
     logger.debug("Running relevance check chain")
-    
+
     try:
         result = chain.invoke({"input_search_results": json.dumps(search_results, indent=2)})
         logger.info(f"Found {len(result.relevant_results)} relevant results")
@@ -172,19 +179,19 @@ def check_search_relevance(search_results: Dict[str, Any]) -> RelevanceCheckOutp
 def convert_html_to_markdown(html_content: str) -> str:
     """Convert HTML content to markdown format."""
     soup = BeautifulSoup(html_content, 'html.parser')
-    
+
     # Convert headers
     for h in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
         level = int(h.name[1])
         h.replace_with('#' * level + ' ' + h.get_text() + '\n\n')
-    
+
     # Convert links
     for a in soup.find_all('a'):
         href = a.get('href', '')
         text = a.get_text()
         if href and text:
             a.replace_with(f'[{text}]({href})')
-    
+
     # Convert formatting
     for tag, marker in [
         (['b', 'strong'], '**'),
@@ -192,16 +199,16 @@ def convert_html_to_markdown(html_content: str) -> str:
     ]:
         for element in soup.find_all(tag):
             element.replace_with(f'{marker}{element.get_text()}{marker}')
-    
+
     # Convert lists
     for ul in soup.find_all('ul'):
         for li in ul.find_all('li'):
             li.replace_with(f'- {li.get_text()}\n')
-    
+
     for ol in soup.find_all('ol'):
         for i, li in enumerate(ol.find_all('li'), 1):
             li.replace_with(f'{i}. {li.get_text()}\n')
-    
+
     # Clean up text
     text = soup.get_text()
     return re.sub(r'\n\s*\n', '\n\n', text).strip()
@@ -211,13 +218,13 @@ def scrape_and_save_markdown(relevant_results: List[Dict[str, Any]]) -> List[Dic
     """Scrape HTML content from URLs and save as markdown."""
     logger.info(f"Scraping content from {len(relevant_results)} URLs")
     markdown_contents = []
-    
+
     for result in relevant_results:
         url = result.get('link')
         if not url:
             logger.warning(f"No URL found in result: {result}")
             continue
-            
+
         logger.debug(f"Scraping URL: {url}")
         try:
             response = requests.get(
@@ -227,13 +234,13 @@ def scrape_and_save_markdown(relevant_results: List[Dict[str, Any]]) -> List[Dic
             if response.status_code != 200:
                 logger.error(f"Failed to scrape {url}: {response.status_code}")
                 continue
-                
+
             html_content = response.text
             logger.debug(f"Successfully scraped {len(html_content)} bytes from {url}")
-            
+
             markdown_content = convert_html_to_markdown(html_content)
             logger.debug(f"Converted HTML to {len(markdown_content)} bytes of markdown")
-            
+
             markdown_contents.append({
                 'content': markdown_content,
                 'url': url,
@@ -243,7 +250,7 @@ def scrape_and_save_markdown(relevant_results: List[Dict[str, Any]]) -> List[Dic
         except Exception as e:
             logger.error(f"Error processing {url}: {str(e)}")
             continue
-    
+
     logger.info(f"Successfully scraped {len(markdown_contents)} URLs")
     return markdown_contents
 
@@ -256,25 +263,25 @@ def generate_summaries(markdown_contents: List[Dict[str, Any]]) -> List[Dict[str
     summary_template = ChatPromptTemplate.from_messages([("system", summary_prompt)])
     llm = ChatOpenAI(model="gpt-4o")
     summary_chain = summary_template | llm
-    
+
     summaries = []
     for content in markdown_contents:
         try:
             summary = summary_chain.invoke({
                 'markdown_input': ' '.join(content['content'].split()[:2000])
             })
-            
+
             summary_filename = f"summary_{content['url']}.md"
             summary_filepath = os.path.join("markdown_summaries", summary_filename)
-            
+
             with open(summary_filepath, 'w', encoding='utf-8') as f:
                 f.write(summary.content)
-            
+
             summaries.append({
                 'markdown_summary': summary.content,
                 'url': content['url']
             })
-                
+
         except Exception as e:
             logger.error(f"Failed to summarize {content['url']}: {str(e)}")
 
@@ -285,11 +292,11 @@ def generate_summaries(markdown_contents: List[Dict[str, Any]]) -> List[Dict[str
 def initialize_llm_chains():
     """Initialize LLM chains for summariser and reviewer."""
     logger.info("Initializing LLM chains")
-    
+
     # Load prompts
     summariser_prompt = load_prompt("summariser")
     reviewer_prompt = load_prompt("reviewer")
-    
+
     # Create prompt templates
     summariser_template = ChatPromptTemplate.from_messages([
         ("system", summariser_prompt)
@@ -297,35 +304,35 @@ def initialize_llm_chains():
     reviewer_template = ChatPromptTemplate.from_messages([
         ("system", reviewer_prompt)
     ])
-    
+
     # Create LLM
     llm = ChatOpenAI()
-    
+
     # Create chains with structured output
     global llm_summariser, llm_reviewer
     llm_summariser = summariser_template | llm.with_structured_output(SummariserOutput)
     llm_reviewer = reviewer_template | llm.with_structured_output(ReviewerOutput)
-    
+
     logger.debug("LLM chains initialized successfully")
 
 
 def summariser(state: Dict) -> Dict:
     """Generate email summary from the state."""
     logger.info("Generating email summary")
-    
+
     # Initialize state if needed
     messages = state.get("messages", [])
     summaries = state.get("summaries", [])
     email_template = state.get("email_template", "")
     created_summaries = state.get("created_summaries", [])
-    
+
     try:
         summariser_output = llm_summariser.invoke({
             "messages": messages,
             "list_of_summaries": summaries,
             "email_template": email_template
         })
-        
+
         # Update state with new values
         return {
             "messages": messages + [
@@ -345,12 +352,12 @@ def summariser(state: Dict) -> Dict:
 def reviewer(state: Dict) -> Dict:
     """Review the generated summary."""
     logger.info("Reviewing generated summary")
-    
+
     messages = state.get("messages", [])
     summaries = state.get("summaries", [])
     email_template = state.get("email_template", "")
     created_summaries = state.get("created_summaries", [])
-    
+
     try:
         # Convert messages for reviewer
         converted_messages = [
@@ -359,11 +366,11 @@ def reviewer(state: Dict) -> Dict:
             else msg
             for msg in messages
         ]
-        
+
         reviewer_output = llm_reviewer.invoke({
             "messages": converted_messages
         })
-        
+
         # Update state with new values
         return {
             "messages": messages + [AIMessage(content=reviewer_output.message)],
@@ -386,15 +393,15 @@ def conditional_edge(state: Dict) -> Literal["summariser", END]:
 def send_email(email_content: str, destination_email: str):
     """Send email using Sendinblue API."""
     logger.info(f"Sending email to {destination_email}")
-    
+
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key['api-key'] = os.getenv("SENDINGBLUE_API_KEY")
     logger.debug("Configured Sendinblue API client")
-    
+
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
         sib_api_v3_sdk.ApiClient(configuration)
     )
-    
+
     email_params = {
         "subject": "Daily AI Research Summary",
         "sender": {"name": "Will White", "email": destination_email},
@@ -403,7 +410,7 @@ def send_email(email_content: str, destination_email: str):
         "params": {"subject": "Daily AI Research Summary"}
     }
     logger.debug(f"Email parameters prepared: {email_params}")
-    
+
     try:
         api_response = api_instance.send_transac_email(
             sib_api_v3_sdk.SendSmtpEmail(**email_params)
@@ -417,7 +424,7 @@ def send_email(email_content: str, destination_email: str):
 def main():
     """Main execution flow."""
     logger.info("Starting email research assistant")
-    
+
     try:
         # Try to load environment variables from .env file first
         if os.path.exists(".env"):
@@ -428,7 +435,7 @@ def main():
                         key, value = line.strip().split('=', 1)
                         os.environ[key] = value
             logger.debug("Environment variables loaded from .env file")
-        
+
         # Validate environment variables after loading
         validate_environment_variables()
     except ValueError as e:
@@ -438,14 +445,14 @@ def main():
         for var in required_environment_variables:
             print(f"- {var}")
         return
-    
+
     # Get validated destination email
     destination_email = os.getenv("DESTINATION_EMAIL")
     logger.info(f"Using destination email: {destination_email}")
-    
+
     # Initialize LLM chains
     initialize_llm_chains()
-    
+
     # Search and filter results
     logger.info("Starting search and filtering process")
     relevant_results = []
@@ -457,21 +464,21 @@ def main():
         filtered_results = [r for r in results if r['id'] in relevant_ids]
         relevant_results.extend(filtered_results)
     logger.info(f"Found {len(relevant_results)} total relevant results")
-    
+
     # Process content
     logger.info("Processing content")
     markdown_contents = scrape_and_save_markdown(relevant_results)
     summaries = generate_summaries(markdown_contents)
     logger.info(f"Generated {len(summaries)} summaries")
-    
+
     # Create workflow
     logger.info("Setting up workflow")
     workflow = StateGraph(State)
-    
+
     # Add nodes
     workflow.add_node("summariser", summariser)
     workflow.add_node("reviewer", reviewer)
-    
+
     # Add edges
     workflow.add_edge("summariser", "reviewer")
     workflow.add_conditional_edges(
@@ -482,15 +489,15 @@ def main():
             "end": END
         }
     )
-    
+
     # Set entry point
     workflow.set_entry_point("summariser")
     logger.debug("Workflow graph configured")
-    
+
     # Compile
     logger.info("Compiling workflow")
     app = workflow.compile()
-    
+
     # Run
     logger.info("Running workflow")
     initial_state = {
@@ -500,7 +507,7 @@ def main():
         "created_summaries": [],
         "email_template": ""
     }
-    
+
     try:
         for output in app.stream({"configurable": initial_state}):
             logger.debug(f"Workflow output: {output}")
@@ -508,7 +515,7 @@ def main():
                 latest_summary = output["created_summaries"][-1]
                 logger.info("Email content generated, sending email")
                 send_email(latest_summary, destination_email)
-        
+
         logger.info("Email research assistant completed successfully")
     except Exception as e:
         logger.error(f"Error during workflow execution: {str(e)}")
