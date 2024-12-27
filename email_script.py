@@ -282,47 +282,105 @@ def generate_summaries(markdown_contents: List[Dict[str, Any]]) -> List[Dict[str
     return summaries
 
 
-def summariser(state: State) -> Dict:
+def initialize_llm_chains():
+    """Initialize LLM chains for summariser and reviewer."""
+    logger.info("Initializing LLM chains")
+    
+    # Load prompts
+    summariser_prompt = load_prompt("summariser")
+    reviewer_prompt = load_prompt("reviewer")
+    
+    # Create prompt templates
+    summariser_template = ChatPromptTemplate.from_messages([
+        ("system", summariser_prompt)
+    ])
+    reviewer_template = ChatPromptTemplate.from_messages([
+        ("system", reviewer_prompt)
+    ])
+    
+    # Create LLM
+    llm = ChatOpenAI()
+    
+    # Create chains with structured output
+    global llm_summariser, llm_reviewer
+    llm_summariser = summariser_template | llm.with_structured_output(SummariserOutput)
+    llm_reviewer = reviewer_template | llm.with_structured_output(ReviewerOutput)
+    
+    logger.debug("LLM chains initialized successfully")
+
+
+def summariser(state: Dict) -> Dict:
     """Generate email summary from the state."""
     logger.info("Generating email summary")
-    summariser_output = llm_summariser.invoke({
-        "messages": state["messages"],
-        "list_of_summaries": state["summaries"],
-        "input_template": state["email_template"]
-    })
-    new_messages = [
-        AIMessage(content=summariser_output.email_summary),
-        AIMessage(content=summariser_output.message)
-    ]
-    return {
-        "messages": new_messages,
-        "created_summaries": [summariser_output.email_summary]
-    }
+    
+    # Initialize state if needed
+    messages = state.get("messages", [])
+    summaries = state.get("summaries", [])
+    email_template = state.get("email_template", "")
+    created_summaries = state.get("created_summaries", [])
+    
+    try:
+        summariser_output = llm_summariser.invoke({
+            "messages": messages,
+            "list_of_summaries": summaries,
+            "email_template": email_template
+        })
+        
+        # Update state with new values
+        return {
+            "messages": messages + [
+                AIMessage(content=summariser_output.email_summary),
+                HumanMessage(content=summariser_output.message)
+            ],
+            "summaries": summaries,
+            "email_template": email_template,
+            "created_summaries": created_summaries + [summariser_output.email_summary],
+            "approved": False
+        }
+    except Exception as e:
+        logger.error(f"Error in summariser: {str(e)}")
+        raise
 
 
-def reviewer(state: State) -> Dict:
+def reviewer(state: Dict) -> Dict:
     """Review the generated summary."""
     logger.info("Reviewing generated summary")
-    converted_messages = [
-        HumanMessage(content=msg.content) if isinstance(msg, AIMessage)
-        else AIMessage(content=msg.content) if isinstance(msg, HumanMessage)
-        else msg
-        for msg in state["messages"]
-    ]
     
-    state["messages"] = converted_messages
-    reviewer_output = llm_reviewer.invoke({"messages": state["messages"]})
+    messages = state.get("messages", [])
+    summaries = state.get("summaries", [])
+    email_template = state.get("email_template", "")
+    created_summaries = state.get("created_summaries", [])
     
-    return {
-        "messages": [HumanMessage(content=reviewer_output.message)],
-        "approved": reviewer_output.approved
-    }
+    try:
+        # Convert messages for reviewer
+        converted_messages = [
+            HumanMessage(content=msg.content) if isinstance(msg, AIMessage)
+            else AIMessage(content=msg.content) if isinstance(msg, HumanMessage)
+            else msg
+            for msg in messages
+        ]
+        
+        reviewer_output = llm_reviewer.invoke({
+            "messages": converted_messages
+        })
+        
+        # Update state with new values
+        return {
+            "messages": messages + [AIMessage(content=reviewer_output.message)],
+            "summaries": summaries,
+            "email_template": email_template,
+            "created_summaries": created_summaries,
+            "approved": reviewer_output.approved
+        }
+    except Exception as e:
+        logger.error(f"Error in reviewer: {str(e)}")
+        raise
 
 
-def conditional_edge(state: State) -> Literal["summariser", END]:
+def conditional_edge(state: Dict) -> Literal["summariser", END]:
     """Determine next step based on approval status."""
-    logger.info("Determining next step based on approval status")
-    return END if state["approved"] else "summariser"
+    logger.info(f"Determining next step based on approval status: {state.get('approved', False)}")
+    return END if state.get("approved", False) else "summariser"
 
 
 def send_email(email_content: str, destination_email: str):
@@ -385,6 +443,9 @@ def main():
     destination_email = os.getenv("DESTINATION_EMAIL")
     logger.info(f"Using destination email: {destination_email}")
     
+    # Initialize LLM chains
+    initialize_llm_chains()
+    
     # Search and filter results
     logger.info("Starting search and filtering process")
     relevant_results = []
@@ -432,14 +493,26 @@ def main():
     
     # Run
     logger.info("Running workflow")
-    config = {"configurable": {"summaries": summaries}}
-    for output in app.stream(config):
-        logger.debug(f"Workflow output: {output}")
-        if output.get("email_content"):
-            logger.info("Email content generated, sending email")
-            send_email(output["email_content"], destination_email)
+    initial_state = {
+        "messages": [],
+        "summaries": summaries,
+        "approved": False,
+        "created_summaries": [],
+        "email_template": ""
+    }
     
-    logger.info("Email research assistant completed successfully")
+    try:
+        for output in app.stream({"configurable": initial_state}):
+            logger.debug(f"Workflow output: {output}")
+            if "created_summaries" in output and output["created_summaries"]:
+                latest_summary = output["created_summaries"][-1]
+                logger.info("Email content generated, sending email")
+                send_email(latest_summary, destination_email)
+        
+        logger.info("Email research assistant completed successfully")
+    except Exception as e:
+        logger.error(f"Error during workflow execution: {str(e)}")
+        raise
 
 
 if __name__ == "__main__":
